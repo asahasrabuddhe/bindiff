@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 )
 
-var patchError = errors.New("bindiff: corrupt patch")
+var PatchError = errors.New("bindiff: corrupt patch")
 
 func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 	var header header
@@ -19,11 +19,11 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 	}
 
 	if header.Magic != magic {
-		return patchError
+		return PatchError
 	}
 
 	if header.ControlLength < 0 || header.DiffLength < 0 || header.NewSize < 0 {
-		return patchError
+		return PatchError
 	}
 
 	controlBuffer := make([]byte, header.ControlLength)
@@ -69,13 +69,13 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 
 		// Sanity-check
 		if newPosition+ctrl.Add > header.NewSize {
-			return patchError
+			return PatchError
 		}
 
 		// Read diff string
 		_, err = io.ReadFull(diffReader, newBuffer[newPosition:newPosition+ctrl.Add])
 		if err != nil {
-			return patchError
+			return PatchError
 		}
 
 		// Add old data to diff string
@@ -91,13 +91,13 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 
 		// Sanity-check
 		if newPosition+ctrl.Copy > header.NewSize {
-			return patchError
+			return PatchError
 		}
 
 		// Read extra string
 		_, err = io.ReadFull(extraReader, newBuffer[newPosition:newPosition+ctrl.Copy])
 		if err != nil {
-			return patchError
+			return PatchError
 		}
 
 		// Adjust pointers
