@@ -5,6 +5,8 @@ import (
 	"go.ajitem.com/bindiff"
 	"log"
 	"os"
+	"runtime"
+	"time"
 )
 
 var Version string
@@ -13,7 +15,7 @@ func main() {
 	app := cli.NewApp()
 
 	app.Name = "bindiff"
-	app.Usage = "Simple tool to create or apply patch of difference in two binary files"
+	app.Usage = "Simple tool to create patches from or apply patches to binary files"
 
 	app.Authors = []*cli.Author{
 		{
@@ -22,9 +24,18 @@ func main() {
 		},
 	}
 
+	app.EnableBashCompletion = true
 	app.Version = Version
+	app.Compiled = time.Now()
+	app.Copyright = "© 2019 Ajitem Sahasrabuddhe"
+	app.Metadata = map[string]interface{}{
+		"name":    app.Name,
+		"version": app.Version,
+		"arch":    runtime.GOARCH,
+		"os":      runtime.GOOS,
+	}
 
-	app.Flags = []cli.Flag{
+	flags := []cli.Flag{
 		&cli.PathFlag{
 			Name:     "oldfile",
 			Aliases:  []string{"o"},
@@ -46,8 +57,10 @@ func main() {
 		{
 			Name:    "diff",
 			Aliases: []string{"d"},
+			Usage:   "Calculates the diff in between the `OLDFILE` and the `NEWFILE` and writes it into the `PATCHFILE`",
+			Flags:   flags,
 			Action: func(context *cli.Context) error {
-				oldFile, newFile, patchFile, err := getFilesFromContext(context, true)
+				oldFile, newFile, patchFile, err := getFilesFromContext(context)
 				if err != nil {
 					return err
 				}
@@ -58,8 +71,10 @@ func main() {
 		{
 			Name:    "patch",
 			Aliases: []string{"p"},
+			Usage:   "Applies the `PATCHFILE` to the `OLDFILE` to create a `NEWFILE`",
+			Flags:   flags,
 			Action: func(context *cli.Context) error {
-				oldFile, newFile, patchFile, err := getFilesFromContext(context, false)
+				oldFile, newFile, patchFile, err := getFilesFromContext(context)
 				if err != nil {
 					return err
 				}
@@ -75,13 +90,13 @@ func main() {
 	}
 }
 
-func getFilesFromContext(context *cli.Context, diff bool) (oldFile *os.File, newFile *os.File, patchFile *os.File, err error) {
+func getFilesFromContext(context *cli.Context) (oldFile *os.File, newFile *os.File, patchFile *os.File, err error) {
 	oldFile, err = os.Open(context.Path("oldfile"))
 	if err != nil {
 		return
 	}
 
-	if diff {
+	if context.Command.Name == "diff" || context.Command.Name == "d"{
 		newFile, err = os.Open(context.Path("newfile"))
 		if err != nil {
 			return
