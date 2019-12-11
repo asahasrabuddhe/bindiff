@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/urfave/cli/v2"
 	"go.ajitem.com/bindiff"
+	"log"
 	"os"
 )
 
@@ -67,6 +68,8 @@ func main() {
 			},
 		},
 	}
+
+	log.Fatal(app.Run(os.Args))
 }
 
 func getFilesFromContext(context *cli.Context) (*os.File, *os.File, *os.File, error) {
