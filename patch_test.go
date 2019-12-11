@@ -21,6 +21,12 @@ func TestPatch(t *testing.T) {
 		{
 			old: mustWriteRandomFile("old.", 1e3, 1),
 			new: mustWriteRandomFile("new.", 1e3, 2),
+		},	{
+			old: mustWriteRandomFile("old.", 1e5, 1),
+			new: mustWriteRandomFile("new.", 1e5, 2),
+		},	{
+			old: mustWriteRandomFile("old.", 1e7, 1),
+			new: mustWriteRandomFile("new.", 1e7, 2),
 		},
 	}
 
