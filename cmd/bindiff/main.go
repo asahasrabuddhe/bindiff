@@ -47,7 +47,7 @@ func main() {
 			Name:    "diff",
 			Aliases: []string{"d"},
 			Action: func(context *cli.Context) error {
-				oldFile, newFile, patchFile, err := getFilesFromContext(context)
+				oldFile, newFile, patchFile, err := getFilesFromContext(context, true)
 				if err != nil {
 					return err
 				}
@@ -59,7 +59,7 @@ func main() {
 			Name:    "patch",
 			Aliases: []string{"p"},
 			Action: func(context *cli.Context) error {
-				oldFile, newFile, patchFile, err := getFilesFromContext(context)
+				oldFile, newFile, patchFile, err := getFilesFromContext(context, false)
 				if err != nil {
 					return err
 				}
@@ -72,20 +72,32 @@ func main() {
 	log.Fatal(app.Run(os.Args))
 }
 
-func getFilesFromContext(context *cli.Context) (*os.File, *os.File, *os.File, error) {
-	oldFile, err := os.Open(context.Path("oldfile"))
+func getFilesFromContext(context *cli.Context, diff bool) (oldFile *os.File, newFile *os.File, patchFile *os.File, err error) {
+	oldFile, err = os.Open(context.Path("oldfile"))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	newFile, err := os.Open(context.Path("newFile"))
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	if diff {
+		newFile, err = os.Open(context.Path("newfile"))
+		if err != nil {
+			return nil, nil, nil, err
+		}
 
-	patchFile, err := os.Open(context.Path("patchFile"))
-	if err != nil {
-		return nil, nil, nil, err
+		patchFile, err = os.Create(context.Path("patchfile"))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	} else {
+		newFile, err = os.Create(context.Path("newfile"))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		patchFile, err = os.Open(context.Path("patchfile"))
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	return oldFile, newFile, patchFile, nil
