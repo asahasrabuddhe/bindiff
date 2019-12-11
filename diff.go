@@ -114,7 +114,7 @@ func split(I, V []int, start, length, h int) {
 	}
 }
 
-func qsufsort(buffer []byte) []int {
+func quickSuffixSort(buffer []byte) []int {
 	var buckets [256]int
 	var i, h int
 	I := make([]int, len(buffer)+1)
@@ -212,7 +212,7 @@ func diffBytes(oldBuffer, newBuffer []byte) ([]byte, error) {
 
 func diff(oldBuffer, newBuffer []byte, patch io.WriteSeeker) error {
 	var lenf int
-	I := qsufsort(oldBuffer)
+	I := quickSuffixSort(oldBuffer)
 	diffBytes := make([]byte, len(newBuffer))
 	extraBytes := make([]byte, len(newBuffer))
 	var diffBytesLength, extraBytesLength int

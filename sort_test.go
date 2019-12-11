@@ -13,7 +13,7 @@ var sortT = [][]byte{
 
 func TestQsufsort(t *testing.T) {
 	for _, s := range sortT {
-		I := qsufsort(s)
+		I := quickSuffixSort(s)
 		for i := 1; i < len(I); i++ {
 			if cmp.Equal(s[I[i-1]:], s[I[i]:]) {
 				t.Fatalf("unsorted at %d", i)

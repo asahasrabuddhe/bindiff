@@ -31,6 +31,7 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 	if err != nil {
 		return err
 	}
+
 	controlReader, err := bzip2.NewReader(bytes.NewReader(controlBuffer), &bzip2.ReaderConfig{})
 	if err != nil {
 		return err
@@ -41,6 +42,7 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 	if err != nil {
 		return err
 	}
+
 	diffReader, err := bzip2.NewReader(bytes.NewReader(diffBuffer), &bzip2.ReaderConfig{})
 	if err != nil {
 		return err
