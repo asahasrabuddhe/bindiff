@@ -69,36 +69,39 @@ func main() {
 		},
 	}
 
-	log.Fatal(app.Run(os.Args))
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func getFilesFromContext(context *cli.Context, diff bool) (oldFile *os.File, newFile *os.File, patchFile *os.File, err error) {
 	oldFile, err = os.Open(context.Path("oldfile"))
 	if err != nil {
-		return nil, nil, nil, err
+		return
 	}
 
 	if diff {
 		newFile, err = os.Open(context.Path("newfile"))
 		if err != nil {
-			return nil, nil, nil, err
+			return
 		}
 
 		patchFile, err = os.Create(context.Path("patchfile"))
 		if err != nil {
-			return nil, nil, nil, err
+			return
 		}
 	} else {
 		newFile, err = os.Create(context.Path("newfile"))
 		if err != nil {
-			return nil, nil, nil, err
+			return
 		}
 
 		patchFile, err = os.Open(context.Path("patchfile"))
 		if err != nil {
-			return nil, nil, nil, err
+			return
 		}
 	}
 
-	return oldFile, newFile, patchFile, nil
+	return
 }
