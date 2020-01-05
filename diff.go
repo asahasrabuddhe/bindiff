@@ -3,9 +3,10 @@ package bindiff
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/dsnet/compress/bzip2"
 	"io"
 	"io/ioutil"
+
+	"github.com/dsnet/compress/bzip2"
 )
 
 func Diff(old, new io.Reader, patch io.Writer) error {

@@ -1,10 +1,11 @@
 package bindiff
 
 import (
-	"github.com/google/go-cmp/cmp"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestPatch(t *testing.T) {
@@ -21,10 +22,10 @@ func TestPatch(t *testing.T) {
 		{
 			old: mustWriteRandomFile("old.", 1e3, 1),
 			new: mustWriteRandomFile("new.", 1e3, 2),
-		},	{
+		}, {
 			old: mustWriteRandomFile("old.", 1e5, 1),
 			new: mustWriteRandomFile("new.", 1e5, 2),
-		},	{
+		}, {
 			old: mustWriteRandomFile("old.", 1e7, 1),
 			new: mustWriteRandomFile("new.", 1e7, 2),
 		},
@@ -43,12 +44,12 @@ func TestPatch(t *testing.T) {
 				t.Error(err)
 			}
 
-			_, err = tt.new.Seek(0, 0 )
+			_, err = tt.new.Seek(0, 0)
 			if err != nil {
 				t.Error(err)
 			}
 
-			_, err = tt.patch.Seek(0, 0 )
+			_, err = tt.patch.Seek(0, 0)
 			if err != nil {
 				t.Error(err)
 			}

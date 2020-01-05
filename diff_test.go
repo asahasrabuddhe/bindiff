@@ -1,10 +1,11 @@
 package bindiff
 
 import (
-	"github.com/google/go-cmp/cmp"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestDiff(t *testing.T) {

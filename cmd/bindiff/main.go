@@ -1,12 +1,13 @@
 package main
 
 import (
-	"github.com/urfave/cli/v2"
-	"go.ajitem.com/bindiff"
 	"log"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/urfave/cli/v2"
+	"go.ajitem.com/bindiff"
 )
 
 var Version string
@@ -96,7 +97,7 @@ func getFilesFromContext(context *cli.Context) (oldFile *os.File, newFile *os.Fi
 		return
 	}
 
-	if context.Command.Name == "diff" || context.Command.Name == "d"{
+	if context.Command.Name == "diff" || context.Command.Name == "d" {
 		newFile, err = os.Open(context.Path("newfile"))
 		if err != nil {
 			return

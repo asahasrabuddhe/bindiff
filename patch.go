@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/dsnet/compress/bzip2"
 	"io"
 	"io/ioutil"
+
+	"github.com/dsnet/compress/bzip2"
 )
 
 var PatchError = errors.New("bindiff: corrupt patch")
