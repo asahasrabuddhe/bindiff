@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.ajitem.com/bindiff/selfupdate"
 )
 
 func runCLI(t *testing.T, args ...string) (string, error) {
@@ -111,5 +113,23 @@ func TestVersion(t *testing.T) {
 	}
 	if !strings.Contains(out, "bindiff version") {
 		t.Fatalf("--version printed %q", out)
+	}
+}
+
+func TestKeygen(t *testing.T) {
+	out, err := runCLI(t, "keygen")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lines := strings.Split(out, "\n")
+	if len(lines) < 5 {
+		t.Fatalf("keygen printed %q", out)
+	}
+	if _, err := selfupdate.ParsePublicKey(lines[1]); err != nil {
+		t.Errorf("public key: %v", err)
+	}
+	if _, err := selfupdate.ParsePrivateKey(lines[4]); err != nil {
+		t.Errorf("private key: %v", err)
 	}
 }
