@@ -1,0 +1,6 @@
+# Check out with LF on every platform, so go mod tidy and gofmt agree with
+# the repository on Windows.
+* text=auto eol=lf
+
+# Golden inputs and patches must match byte for byte.
+testdata/** -text

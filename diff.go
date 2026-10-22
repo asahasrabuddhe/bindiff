@@ -2,32 +2,31 @@ package bindiff
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"io"
-	"io/ioutil"
 
 	"github.com/dsnet/compress/bzip2"
 )
 
-func Diff(old, new io.Reader, patch io.Writer) error {
-	oldBuffer, err := ioutil.ReadAll(old)
+// Diff reads old and new in full, computes a bsdiff 4.x patch that turns old
+// into new, and writes it to patch. The patch ends with the SHA-256 of old
+// and new, which Patch checks and the reference bspatch ignores.
+//
+// Diff holds both inputs and the patch in memory, plus a suffix array of
+// old that needs about 16 bytes per byte of old.
+func Diff(old, new io.Reader, patch io.Writer) error { //nolint:revive // old and new read best here.
+	oldBuffer, err := io.ReadAll(old)
 	if err != nil {
 		return err
 	}
 
-	newBuffer, err := ioutil.ReadAll(new)
+	newBuffer, err := io.ReadAll(new)
 	if err != nil {
 		return err
 	}
 
-	patchBuffer, err := diffBytes(oldBuffer, newBuffer)
-	if err != nil {
-		return err
-	}
-
-	_, err = patch.Write(patchBuffer)
-
-	return err
+	return diff(oldBuffer, newBuffer, patch)
 }
 
 func swap(a []int, i, j int) {
@@ -79,12 +78,13 @@ func split(I, V []int, start, length, h int) {
 	j = 0
 	k = 0
 	for i < jj {
-		if V[I[i]+h] < x {
+		switch v := V[I[i]+h]; {
+		case v < x:
 			i++
-		} else if V[I[i]+h] == x {
+		case v == x:
 			swap(I, i, jj+j)
 			j++
-		} else {
+		default:
 			swap(I, i, kk+k)
 			k++
 		}
@@ -115,6 +115,8 @@ func split(I, V []int, start, length, h int) {
 	}
 }
 
+// quickSuffixSort returns the suffix array of buffer, using the
+// Larsson-Sadakane qsufsort algorithm from bsdiff.
 func quickSuffixSort(buffer []byte) []int {
 	var buckets [256]int
 	var i, h int
@@ -182,55 +184,36 @@ func matchLength(a, b []byte) (i int) {
 	return i
 }
 
+// search finds the longest prefix of newBuffer that occurs in oldBuffer,
+// by binary search over the suffix array I between start and end.
 func search(I []int, oldBuffer, newBuffer []byte, start, end int) (pos, n int) {
-	if end-start < 2 {
-		x := matchLength(oldBuffer[I[start]:], newBuffer)
-		y := matchLength(oldBuffer[I[end]:], newBuffer)
-
-		if x > y {
-			return I[start], x
+	for end-start >= 2 {
+		x := start + (end-start)/2
+		if bytes.Compare(oldBuffer[I[x]:], newBuffer) < 0 {
+			start = x
 		} else {
-			return I[end], y
+			end = x
 		}
 	}
 
-	x := start + (end-start)/2
-	if bytes.Compare(oldBuffer[I[x]:], newBuffer) < 0 {
-		return search(I, oldBuffer, newBuffer, x, end)
-	} else {
-		return search(I, oldBuffer, newBuffer, start, x)
+	x := matchLength(oldBuffer[I[start]:], newBuffer)
+	y := matchLength(oldBuffer[I[end]:], newBuffer)
+	if x > y {
+		return I[start], x
 	}
+	return I[end], y
 }
 
-func diffBytes(oldBuffer, newBuffer []byte) ([]byte, error) {
-	var patch seekBuffer
-	err := diff(oldBuffer, newBuffer, &patch)
-	if err != nil {
-		return nil, err
-	}
-	return patch.buffer, nil
-}
-
-func diff(oldBuffer, newBuffer []byte, patch io.WriteSeeker) error {
+func diff(oldBuffer, newBuffer []byte, patch io.Writer) error {
 	var lenf int
 	I := quickSuffixSort(oldBuffer)
 	diffBytes := make([]byte, len(newBuffer))
 	extraBytes := make([]byte, len(newBuffer))
 	var diffBytesLength, extraBytesLength int
 
-	var header header
-	header.Magic = magic
-	header.NewSize = int64(len(newBuffer))
-	err := binary.Write(patch, signMagnitudeLittleEndian{}, &header)
-	if err != nil {
-		return err
-	}
+	// Control triples are 24 bytes each, so build the block in memory.
+	var ctrl []byte
 
-	// Compute the differences, writing ctrl as we go
-	writer, err := bzip2.NewWriter(patch, &bzip2.WriterConfig{Level: bzip2.BestCompression})
-	if err != nil {
-		return err
-	}
 	var scan, pos, length int
 	var lastScan, lastPosition, lastOffset int
 	for scan < len(newBuffer) {
@@ -288,7 +271,7 @@ func diff(oldBuffer, newBuffer []byte, patch io.WriteSeeker) error {
 				s := 0
 				Ss := 0
 				lens := 0
-				for i := 0; i < overlap; i++ {
+				for i := range overlap {
 					if newBuffer[lastScan+lenf-overlap+i] == oldBuffer[lastPosition+lenf-overlap+i] {
 						s++
 					}
@@ -315,96 +298,73 @@ func diff(oldBuffer, newBuffer []byte, patch io.WriteSeeker) error {
 			diffBytesLength += lenf
 			extraBytesLength += (scan - bufferLength) - (lastScan + lenf)
 
-			err = binary.Write(writer, signMagnitudeLittleEndian{}, int64(lenf))
-			if err != nil {
-				writer.Close()
-				return err
-			}
-
-			val := (scan - bufferLength) - (lastScan + lenf)
-			err = binary.Write(writer, signMagnitudeLittleEndian{}, int64(val))
-			if err != nil {
-				writer.Close()
-				return err
-			}
-
-			val = (pos - bufferLength) - (lastPosition + lenf)
-			err = binary.Write(writer, signMagnitudeLittleEndian{}, int64(val))
-			if err != nil {
-				writer.Close()
-				return err
-			}
+			ctrl = appendInt64(ctrl, int64(lenf))
+			ctrl = appendInt64(ctrl, int64((scan-bufferLength)-(lastScan+lenf)))
+			ctrl = appendInt64(ctrl, int64((pos-bufferLength)-(lastPosition+lenf)))
 
 			lastScan = scan - bufferLength
 			lastPosition = pos - bufferLength
 			lastOffset = pos - scan
 		}
 	}
-	err = writer.Close()
+	controlBlock, err := compress(ctrl)
 	if err != nil {
 		return err
 	}
 
-	// Compute size of compressed ctrl data
-	l64, err := patch.Seek(0, 1)
-	if err != nil {
-		return err
-	}
-	header.ControlLength = l64 - 32
-
-	// Write compressed diff data
-	writer, err = bzip2.NewWriter(patch, &bzip2.WriterConfig{Level: bzip2.BestCompression})
-	if err != nil {
-		return err
-	}
-	n, err := writer.Write(diffBytes[:diffBytesLength])
-	if err != nil {
-		writer.Close()
-		return err
-	}
-	if n != diffBytesLength {
-		writer.Close()
-		return io.ErrShortWrite
-	}
-	err = writer.Close()
+	diffBlock, err := compress(diffBytes[:diffBytesLength])
 	if err != nil {
 		return err
 	}
 
-	// Compute size of compressed diff data
-	n64, err := patch.Seek(0, 1)
-	if err != nil {
-		return err
-	}
-	header.DiffLength = n64 - l64
-
-	// Write compressed extra data
-	writer, err = bzip2.NewWriter(patch, &bzip2.WriterConfig{Level: bzip2.BestCompression})
-	if err != nil {
-		return err
-	}
-	n, err = writer.Write(extraBytes[:extraBytesLength])
-	if err != nil {
-		writer.Close()
-		return err
-	}
-	if n != extraBytesLength {
-		writer.Close()
-		return io.ErrShortWrite
-	}
-	err = writer.Close()
+	extraBlock, err := compress(extraBytes[:extraBytesLength])
 	if err != nil {
 		return err
 	}
 
-	// Seek to the beginning, write the header, and close the file
-	_, err = patch.Seek(0, 0)
-	if err != nil {
+	h := header{
+		Magic:         magic,
+		ControlLength: int64(len(controlBlock)),
+		DiffLength:    int64(len(diffBlock)),
+		NewSize:       int64(len(newBuffer)),
+	}
+	if err := binary.Write(patch, signMagnitudeLittleEndian{}, &h); err != nil {
 		return err
 	}
-	err = binary.Write(patch, signMagnitudeLittleEndian{}, &header)
-	if err != nil {
-		return err
+
+	sums := trailer{old: sha256.Sum256(oldBuffer), new: sha256.Sum256(newBuffer)}
+	for _, block := range [][]byte{controlBlock, diffBlock, extraBlock, sums.append(nil)} {
+		if _, err := patch.Write(block); err != nil {
+			return err
+		}
 	}
+
 	return nil
+}
+
+// compress returns p compressed with bzip2 at the highest level, as bsdiff
+// does.
+func compress(p []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w, err := bzip2.NewWriter(&buf, &bzip2.WriterConfig{Level: bzip2.BestCompression})
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := w.Write(p); err != nil {
+		return nil, err
+	}
+
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// appendInt64 appends v to b in the sign-magnitude encoding bsdiff uses.
+func appendInt64(b []byte, v int64) []byte {
+	var buf [8]byte
+	signMagnitudeLittleEndian{}.PutUint64(buf[:], uint64(v))
+	return append(b, buf[:]...)
 }

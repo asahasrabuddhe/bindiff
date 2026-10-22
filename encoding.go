@@ -1,13 +1,17 @@
 package bindiff
 
+// signMagnitudeLittleEndian is the integer encoding bsdiff uses: 64-bit
+// little-endian with the top bit as the sign. It implements
+// binary.ByteOrder so it works with binary.Read and binary.Write, which only
+// call the 64-bit methods for the int64 fields in a patch.
 type signMagnitudeLittleEndian struct{}
 
 func (s signMagnitudeLittleEndian) Uint16([]byte) uint16 {
-	panic("implement me")
+	panic("bindiff: only 64-bit values are sign-magnitude encoded")
 }
 
 func (s signMagnitudeLittleEndian) Uint32([]byte) uint32 {
-	panic("implement me")
+	panic("bindiff: only 64-bit values are sign-magnitude encoded")
 }
 
 func (s signMagnitudeLittleEndian) Uint64(b []byte) uint64 {
@@ -28,11 +32,11 @@ func (s signMagnitudeLittleEndian) Uint64(b []byte) uint64 {
 }
 
 func (s signMagnitudeLittleEndian) PutUint16([]byte, uint16) {
-	panic("implement me")
+	panic("bindiff: only 64-bit values are sign-magnitude encoded")
 }
 
 func (s signMagnitudeLittleEndian) PutUint32([]byte, uint32) {
-	panic("implement me")
+	panic("bindiff: only 64-bit values are sign-magnitude encoded")
 }
 
 func (s signMagnitudeLittleEndian) PutUint64(b []byte, v uint64) {
