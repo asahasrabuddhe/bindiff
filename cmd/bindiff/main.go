@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,13 +14,21 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"go.ajitem.com/bindiff"
+	"go.ajitem.com/bindiff/selfupdate"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = ""
 
+// updatePublicKey verifies release manifests for self-update. Release
+// builds set it with -ldflags "-X main.updatePublicKey=...".
+var updatePublicKey = ""
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	// Remove the binary a self-update on Windows left behind.
+	_ = selfupdate.CleanupOld("")
 
 	err := run(ctx, os.Args, os.Stdout, os.Stderr)
 	stop()
@@ -78,10 +87,76 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 					return patch(cmd.String("oldfile"), cmd.String("newfile"), cmd.String("patchfile"))
 				},
 			},
+			{
+				Name:  "keygen",
+				Usage: "print a new key pair for signing release manifests",
+				Action: func(_ context.Context, cmd *cli.Command) error {
+					return keygen(cmd.Root().Writer)
+				},
+			},
+			{
+				Name:  "self-update",
+				Usage: "update bindiff to the latest release with a patch",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "check", Usage: "only report whether an update is available"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return selfUpdate(ctx, cmd.Root().Writer, cmd.Bool("check"))
+				},
+			},
 		},
 	}
 
 	return cmd.Run(ctx, args)
+}
+
+func keygen(w io.Writer) error {
+	pub, priv, err := selfupdate.GenerateKey()
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(w, "Public key (embed in your program):\n%s\n\nPrivate key (store as a CI secret):\n%s\n", pub, priv)
+	return err
+}
+
+const releasesURL = "https://github.com/asahasrabuddhe/bindiff/releases/latest"
+
+func selfUpdate(ctx context.Context, w io.Writer, checkOnly bool) error {
+	u := &selfupdate.Updater{
+		Source: selfupdate.GitHub("asahasrabuddhe", "bindiff"),
+		Binary: "bindiff",
+	}
+	if updatePublicKey != "" {
+		key, err := selfupdate.ParsePublicKey(updatePublicKey)
+		if err != nil {
+			return err
+		}
+		u.PublicKey = key
+	}
+
+	up, err := u.Check(ctx)
+	switch {
+	case errors.Is(err, selfupdate.ErrUpToDate):
+		_, err = fmt.Fprintf(w, "bindiff %s is up to date\n", buildVersion())
+		return err
+	case errors.Is(err, selfupdate.ErrNoPatch), errors.Is(err, selfupdate.ErrNotFound):
+		_, err = fmt.Fprintf(w, "No patch from this build. Download the latest release from %s\n", releasesURL)
+		return err
+	case err != nil:
+		return err
+	}
+
+	if checkOnly {
+		_, err = fmt.Fprintf(w, "Update available: %s to %s (%d byte patch)\n", buildVersion(), up.Version, up.Entry.PatchSize)
+		return err
+	}
+
+	if err := u.Apply(ctx, up); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "Updated bindiff from %s to %s\n", buildVersion(), up.Version)
+	return err
 }
 
 func diff(oldPath, newPath, patchPath string) error {

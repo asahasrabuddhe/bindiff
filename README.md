@@ -54,6 +54,63 @@ Memory use:
 - `Diff` holds both inputs in memory, plus a suffix array of the old data that needs about 16 bytes per input byte. Diffing a 43 MB binary takes about 9 seconds and under 1 GB.
 - `Patch` holds the old data in memory and streams the new data to the writer. Applying that same 43 MB patch takes under 0.2 seconds and about 140 MB.
 
+## Auto-updating your CLI
+
+The `selfupdate` package lets a Go program update itself by applying a patch to its own executable. A user on the previous release downloads a small patch instead of the whole binary.
+
+```go
+import "go.ajitem.com/bindiff/selfupdate"
+
+func main() {
+	// Removes the old binary a Windows update leaves behind.
+	_ = selfupdate.CleanupOld("")
+	// ...
+}
+
+func update(ctx context.Context) error {
+	u := &selfupdate.Updater{
+		Source:    selfupdate.GitHub("owner", "repo"),
+		PublicKey: publicKey, // from selfupdate.ParsePublicKey
+	}
+
+	up, err := u.Check(ctx)
+	switch {
+	case errors.Is(err, selfupdate.ErrUpToDate):
+		return nil
+	case errors.Is(err, selfupdate.ErrNoPatch):
+		// No patch from this build, for example one several releases
+		// old. Fall back to downloading the full release.
+		return downloadFullRelease(ctx)
+	case err != nil:
+		return err
+	}
+	return u.Apply(ctx, up)
+}
+```
+
+How it works:
+
+- Each release publishes `bindiff-manifest.json`. It lists patches by binary, OS and architecture, with the SHA-256 of the binary each patch applies to, the binary it produces, and the patch itself.
+- `Check` hashes the running executable and picks the entry made for exactly that binary. Version strings play no part in matching.
+- `Apply` downloads the patch, checks every hash, writes the new binary next to the old one, and renames it into place. Windows does not allow replacing a running executable, so there the old binary is moved aside first and removed on the next start by `CleanupOld`.
+- If any check fails, the executable is left untouched.
+
+Sources:
+
+- `selfupdate.GitHub` reads the latest GitHub release. `WithToken` covers private repositories and `WithBaseURL` covers GitHub Enterprise Server.
+- `selfupdate.HTTP` reads from any static host, such as S3 or a CDN.
+- Anything else can implement the two-method `selfupdate.Source` interface.
+
+Signing:
+
+- Run `bindiff keygen` to make an ed25519 key pair.
+- Keep the private key as a CI secret and embed the public key in your program.
+- When `Updater.PublicKey` is set, `Check` rejects any manifest without a valid signature.
+
+If the executable sits in a directory the user cannot write to, such as one managed by a package manager, `Apply` returns an error wrapping `fs.ErrPermission`. Skip self-update for package-manager installs.
+
+The bindiff command updates itself the same way: `bindiff self-update`.
+
 ## Development
 
 ```sh
