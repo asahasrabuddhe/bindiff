@@ -96,3 +96,35 @@ jobs:
           go-version: stable
       - name: Run each benchmark once so they keep compiling and working
         run: go test -run '^$' -bench . -benchtime 1x ./...
+
+  action:
+    name: Action smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
+      - name: Download a real release to patch to
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p new
+          gh release download v0.74.5 -R junegunn/fzf -p '*linux_amd64.tar.gz' -O - | tar -xz -C new
+
+      - id: bindiff
+        uses: ./
+        with:
+          repo: junegunn/fzf
+          tag: v0.74.5
+          binaries: new/fzf
+          upload: false
+
+      - name: Check one patch was made
+        env:
+          PATCH_COUNT: ${{ steps.bindiff.outputs.patch-count }}
+          MANIFEST: ${{ steps.bindiff.outputs.manifest }}
+        run: |
+          test "$PATCH_COUNT" = 1
+          jq -e '.patches[0].from_version == "v0.74.4"' "$MANIFEST"

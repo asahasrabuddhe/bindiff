@@ -25,3 +25,12 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Embedded in the binaries so bindiff self-update checks signatures.
+          BINDIFF_PUBLIC_KEY: ${{ vars.BINDIFF_PUBLIC_KEY }}
+
+      - name: Publish patches from earlier releases
+        uses: ./
+        with:
+          goreleaser-dist: dist
+          previous: 2
+          signing-key: ${{ secrets.BINDIFF_SIGNING_KEY }}

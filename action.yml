@@ -1,0 +1,121 @@
+name: bindiff release patches
+description: Publish binary patches with each release so Go programs can update themselves with the bindiff selfupdate package.
+author: Ajitem Sahasrabuddhe
+branding:
+  icon: download-cloud
+  color: blue
+
+inputs:
+  goreleaser-dist:
+    description: GoReleaser dist directory. The new binaries are read from its artifacts.json. Set this or binaries.
+    default: ""
+  binaries:
+    description: Globs matching the new binaries, one per line, for releases not built with GoReleaser.
+    default: ""
+  previous:
+    description: How many earlier releases to make patches from.
+    default: "1"
+  tag:
+    description: Release tag the new binaries belong to.
+    default: ${{ github.ref_name }}
+  repo:
+    description: Repository as owner/name.
+    default: ${{ github.repository }}
+  signing-key:
+    description: Private key from bindiff keygen. When set, the manifest is signed.
+    default: ""
+  github-token:
+    description: Token with contents write permission, for reading earlier releases and uploading.
+    default: ${{ github.token }}
+  upload:
+    description: Attach the patches and manifest to the release.
+    default: "true"
+  out:
+    description: Directory to write the patches and manifest to.
+    default: bindiff-patches
+  jobs:
+    description: How many diffs to run at once. Each needs about 16 bytes of memory per byte of old binary.
+    default: "2"
+  version:
+    description: bindiff release to download when Go is not installed. Defaults to the action's own tag, or the latest release.
+    default: ""
+
+outputs:
+  manifest:
+    description: Path of the manifest, or empty when there was nothing to patch from.
+    value: ${{ steps.release.outputs.manifest }}
+  patch-count:
+    description: Number of patches made.
+    value: ${{ steps.release.outputs.patch-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install bindiff
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+        BINDIFF_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        bin="$RUNNER_TEMP/bindiff-action"
+        mkdir -p "$bin"
+
+        if command -v go >/dev/null 2>&1; then
+          # Build from the action's own source, so the tool always matches
+          # the action version.
+          go build -C "$GITHUB_ACTION_PATH" -trimpath -o "$bin/" ./cmd/bindiff
+        else
+          version="$BINDIFF_VERSION"
+          if [ -z "$version" ] && [[ "$ACTION_REF" == v* ]]; then version="$ACTION_REF"; fi
+          if [ -z "$version" ]; then
+            version=$(gh release view -R asahasrabuddhe/bindiff --json tagName -q .tagName)
+          fi
+
+          case "$RUNNER_OS" in
+            Linux) os=linux ext=tar.gz ;;
+            macOS) os=darwin ext=tar.gz ;;
+            Windows) os=windows ext=zip ;;
+          esac
+          case "$RUNNER_ARCH" in
+            X64) arch=amd64 ;;
+            ARM64) arch=arm64 ;;
+            *) echo "Unsupported runner architecture $RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+
+          archive="bindiff_${version#v}_${os}_${arch}.${ext}"
+          cd "$bin"
+          gh release download "$version" -R asahasrabuddhe/bindiff -p "$archive" -p checksums.txt
+          grep " $archive\$" checksums.txt > expected.txt
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c expected.txt; else shasum -a 256 -c expected.txt; fi
+          if [ "$ext" = zip ]; then unzip -oq "$archive"; else tar -xzf "$archive"; fi
+        fi
+
+        echo "$bin" >> "$GITHUB_PATH"
+
+    - name: Make patches
+      id: release
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        BINDIFF_SIGNING_KEY: ${{ inputs.signing-key }}
+        INPUT_DIST: ${{ inputs.goreleaser-dist }}
+        INPUT_BINARIES: ${{ inputs.binaries }}
+        INPUT_PREVIOUS: ${{ inputs.previous }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_UPLOAD: ${{ inputs.upload }}
+        INPUT_OUT: ${{ inputs.out }}
+        INPUT_JOBS: ${{ inputs.jobs }}
+      run: |
+        set -euo pipefail
+        args=(release --repo "$INPUT_REPO" --tag "$INPUT_TAG" --previous "$INPUT_PREVIOUS" --out "$INPUT_OUT" --jobs "$INPUT_JOBS")
+
+        if [ -n "$INPUT_DIST" ]; then args+=(--goreleaser "$INPUT_DIST"); fi
+        while IFS= read -r glob; do
+          if [ -n "$glob" ]; then args+=(--binaries "$glob"); fi
+        done <<< "$INPUT_BINARIES"
+        if [ "$INPUT_UPLOAD" = "true" ]; then args+=(--upload); fi
+
+        bindiff "${args[@]}"
