@@ -45,7 +45,9 @@ err := bindiff.Diff(oldReader, newReader, patchWriter)
 err = bindiff.Patch(oldReader, newWriter, patchReader)
 ```
 
-`Patch` returns an error wrapping `bindiff.ErrCorruptPatch` for any malformed patch. The bsdiff format has no checksum of the old data, so applying a patch to the wrong file produces the wrong output without an error. Check a hash of the input or the output when that matters.
+`Patch` returns an error wrapping `bindiff.ErrCorruptPatch` for any malformed patch.
+
+The bsdiff format has no checksums, so with plain bsdiff a patch applied to the wrong file produces the wrong output without an error. bindiff appends the SHA-256 of the old and new data to every patch it makes. `Patch` refuses the wrong old data with `bindiff.ErrChecksumMismatch` before writing anything, and checks the result at the end. The reference `bspatch` ignores these 72 bytes, so the patches stay compatible. Patches without them, such as those from the reference `bsdiff`, apply without the checks.
 
 Memory use:
 

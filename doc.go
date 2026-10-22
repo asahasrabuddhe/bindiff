@@ -14,7 +14,10 @@
 // control and diff blocks, and the size of the new data, each as a 64-bit
 // little-endian sign-magnitude integer.
 //
-// The format carries no checksum of the old data. Applying a patch to the
-// wrong input produces wrong output without an error, so callers should
-// check a hash of the input, the output, or both.
+// The bsdiff format carries no checksums, so a patch applied to the wrong
+// input produces the wrong output without an error. Diff therefore appends
+// a 72-byte trailer after the extra block: the SHA-256 of the old data, the
+// SHA-256 of the new data, and the magic "BDSHA256". Patch checks both when
+// the trailer is present. The reference bspatch reads only the bytes the
+// control triples ask for, so it ignores the trailer.
 package bindiff

@@ -46,8 +46,8 @@ func FuzzPatch(f *testing.F) {
 
 		var out bytes.Buffer
 		err := Patch(bytes.NewReader(old), &out, bytes.NewReader(patch))
-		if err != nil && !errors.Is(err, ErrCorruptPatch) {
-			t.Fatalf("Patch error %v does not wrap ErrCorruptPatch", err)
+		if err != nil && !errors.Is(err, ErrCorruptPatch) && !errors.Is(err, ErrChecksumMismatch) {
+			t.Fatalf("Patch error %v wraps neither ErrCorruptPatch nor ErrChecksumMismatch", err)
 		}
 	})
 }

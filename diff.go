@@ -2,6 +2,7 @@ package bindiff
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"io"
 
@@ -9,7 +10,8 @@ import (
 )
 
 // Diff reads old and new in full, computes a bsdiff 4.x patch that turns old
-// into new, and writes it to patch.
+// into new, and writes it to patch. The patch ends with the SHA-256 of old
+// and new, which Patch checks and the reference bspatch ignores.
 //
 // Diff holds both inputs and the patch in memory, plus a suffix array of
 // old that needs about 16 bytes per byte of old.
@@ -330,7 +332,8 @@ func diff(oldBuffer, newBuffer []byte, patch io.Writer) error {
 		return err
 	}
 
-	for _, block := range [][]byte{controlBlock, diffBlock, extraBlock} {
+	sums := trailer{old: sha256.Sum256(oldBuffer), new: sha256.Sum256(newBuffer)}
+	for _, block := range [][]byte{controlBlock, diffBlock, extraBlock, sums.append(nil)} {
 		if _, err := patch.Write(block); err != nil {
 			return err
 		}

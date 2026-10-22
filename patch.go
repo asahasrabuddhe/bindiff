@@ -3,6 +3,7 @@ package bindiff
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -32,6 +33,12 @@ func corrupt(what string, err error) error {
 
 // Patch reads a bsdiff 4.x patch from patch, applies it to the contents of
 // old and writes the result to new.
+//
+// If the patch carries the checksum trailer that Diff writes, Patch checks
+// old against it before writing anything, and checks the result at the
+// end. Either mismatch returns an error wrapping ErrChecksumMismatch.
+// Patches without the trailer, such as those from the reference bsdiff,
+// are applied without the checks.
 //
 // Patch reads all of old into memory and streams the result to new. If the
 // patch turns out to be corrupt part way through, new may already hold a
@@ -71,8 +78,15 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error { //nolint:reviv
 		return corrupt("open diff block", err)
 	}
 
-	// The entire rest of the patch is the extra block.
-	extraReader, err := bzip2.NewReader(patch, nil)
+	// The rest of the patch is the extra block and, from Diff, a checksum
+	// trailer.
+	rest, err := io.ReadAll(patch)
+	if err != nil {
+		return corrupt("read extra block", err)
+	}
+	extraBlock, sums := splitTrailer(rest)
+
+	extraReader, err := bzip2.NewReader(bytes.NewReader(extraBlock), nil)
 	if err != nil {
 		return corrupt("open extra block", err)
 	}
@@ -81,6 +95,11 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error { //nolint:reviv
 	if err != nil {
 		return err
 	}
+
+	if sums != nil && sha256.Sum256(oldBuffer) != sums.old {
+		return fmt.Errorf("%w: old data is not the data this patch was made from", ErrChecksumMismatch)
+	}
+	newHash := sha256.New()
 
 	// Small outputs need small buffers. bufio rounds sizes under 16 up.
 	bufSize := int(min(h.NewSize, chunkSize))
@@ -116,6 +135,7 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error { //nolint:reviv
 				}
 			}
 
+			newHash.Write(buf)
 			if _, err := w.Write(buf); err != nil {
 				return err
 			}
@@ -135,6 +155,7 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error { //nolint:reviv
 				return corrupt("read extra block", err)
 			}
 
+			newHash.Write(buf)
 			if _, err := w.Write(buf); err != nil {
 				return err
 			}
@@ -161,7 +182,14 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error { //nolint:reviv
 		}
 	}
 
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+
+	if sums != nil && [sha256.Size]byte(newHash.Sum(nil)) != sums.new {
+		return fmt.Errorf("%w: patched data does not match the patch", ErrChecksumMismatch)
+	}
+	return nil
 }
 
 // readBlock reads exactly n bytes from r. It grows its buffer as data
