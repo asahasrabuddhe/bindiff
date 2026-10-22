@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  enable:
+    - errorlint
+    - gocritic
+    - misspell
+    - revive
+  settings:
+    gocritic:
+      disabled-checks:
+        # I and V follow the names in the qsufsort paper and bsdiff's C code.
+        - captLocal
+    errcheck:
+      exclude-functions:
+        # Closing a file we only read from, or are about to remove.
+        - (*os.File).Close
+        - os.Remove
+  exclusions:
+    presets:
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - go.ajitem.com/bindiff
