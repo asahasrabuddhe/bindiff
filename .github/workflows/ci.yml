@@ -37,6 +37,8 @@ jobs:
       - run: go vet ./...
 
       - name: Test
+        # PowerShell would split -coverprofile=coverage.out at the dot.
+        shell: bash
         run: go test -race -shuffle=on -coverprofile=coverage.out ./...
 
       - name: Upload coverage
