@@ -111,6 +111,19 @@ If the executable sits in a directory the user cannot write to, such as one mana
 
 The bindiff command updates itself the same way: `bindiff self-update`.
 
+## Publishing patches
+
+The bindiff GitHub Action makes the patches and manifest for each release. With GoReleaser it is one extra step:
+
+```yaml
+- uses: asahasrabuddhe/bindiff@v0.3.0
+  with:
+    goreleaser-dist: dist
+    signing-key: ${{ secrets.BINDIFF_SIGNING_KEY }}
+```
+
+See [docs/releasing-patches.md](docs/releasing-patches.md) for the full setup, other build tools, and other CI systems.
+
 ## Development
 
 ```sh
